@@ -36,85 +36,74 @@ import pickle
 from sklearn.svm import SVC
 
 
-class Classification:
-    def __init__(self, mode='CLASSIFY', data_dir, model, classifier_filename, use_split_dataset='store_true', test_data_dir, batch_size=90, seed=666):
-        self.data_dir = data_dir
-        self.model = model
-        self.classifier_filename = flassifier_filename
-        self.test_data_dir = test_data_dir
+def classification(data_dir, model, classifier_filename, batch_size=90, seed=666, image_size = 160):
 
-        with tf.Graph().as_default():
+    with tf.Graph().as_default():
+    
+        with tf.compat.v1.Session() as sess:
+            
+            np.random.seed(seed=seed)
+            
+            dataset = facenet.get_dataset(data_dir)
+            # Check that there are at least one training image per class
+            for cls in dataset:
+                assert(len(cls.image_paths)>0, 'There must be at least one image for each class in the dataset')            
+
+            ## 0725 여기 들어갈 때 len(dataset) = 0임
+            paths, labels = facenet.get_image_paths_and_labels(dataset)
+            
+            # Load the model
+            print('Loading feature extraction model')
+            facenet.load_model(model)
+            
+            # Get input and output tensors
+            images_placeholder = tf.compat.v1.get_default_graph().get_tensor_by_name("input:0")
+            embeddings = tf.compat.v1.get_default_graph().get_tensor_by_name("embeddings:0")
+            phase_train_placeholder = tf.compat.v1.get_default_graph().get_tensor_by_name("phase_train:0")
+            embedding_size = embeddings.get_shape()[1]
+            
+            # Run forward pass to calculate embeddings
+            print('Calculating features for images')
+            nrof_images = len(paths)
+            nrof_batches_per_epoch = int(math.ceil(1.0*nrof_images / batch_size))
+            emb_array = np.zeros((nrof_images, embedding_size))
+            for i in range(nrof_batches_per_epoch):
+                start_index = i*batch_size
+                end_index = min((i+1)*batch_size, nrof_images)
+                paths_batch = paths[start_index:end_index]
+                images = facenet.load_data(paths_batch, False, False, image_size)
+                feed_dict = { images_placeholder:images, phase_train_placeholder:False }
+                emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
+            
+            classifier_filename_exp = os.path.expanduser(classifier_filename)
+
+            # Train classifier
+            print('Training classifier')
+            model = SVC(kernel='linear', probability=True)
+            model.fit(emb_array, labels)
         
-            with tf.compat.v1.Session() as sess:
-                
-                np.random.seed(seed=self.seed)
-                
-                dataset = facenet.get_dataset(self.data_dir)
-                if (self.mode=='TRAIN'):
-                    dataset = train_set
-                elif (self.mode=='CLASSIFY'):
-                    dataset = test_set
+            # Create a list of class names
+            class_names = [ cls.name.replace('_', ' ') for cls in dataset]
 
-                # Check that there are at least one training image per class
-                for cls in dataset:
-                    assert(len(cls.image_paths)>0, 'There must be at least one image for each class in the dataset')            
+            # Saving classifier model
+            with open(classifier_filename_exp, 'wb') as outfile:
+                pickle.dump((model, class_names), outfile)
+            print('Saved classifier model to file "%s"' % classifier_filename_exp)
+            
+            
+            # Classify images
+            print('Testing classifier')
+            with open(classifier_filename_exp, 'rb') as infile:
+                (model, class_names) = pickle.load(infile)
 
-                ## 0725 여기 들어갈 때 len(dataset) = 0임
-                paths, labels = facenet.get_image_paths_and_labels(dataset)
-                
-                # Load the model
-                print('Loading feature extraction model')
-                facenet.load_model(self.model)
-                
-                # Get input and output tensors
-                images_placeholder = tf.compat.v1.get_default_graph().get_tensor_by_name("input:0")
-                embeddings = tf.compat.v1.get_default_graph().get_tensor_by_name("embeddings:0")
-                phase_train_placeholder = tf.compat.v1.get_default_graph().get_tensor_by_name("phase_train:0")
-                embedding_size = embeddings.get_shape()[1]
-                
-                # Run forward pass to calculate embeddings
-                print('Calculating features for images')
-                nrof_images = len(paths)
-                nrof_batches_per_epoch = int(math.ceil(1.0*nrof_images / self.batch_size))
-                emb_array = np.zeros((nrof_images, embedding_size))
-                for i in range(nrof_batches_per_epoch):
-                    start_index = i*self.batch_size
-                    end_index = min((i+1)*self.batch_size, nrof_images)
-                    paths_batch = paths[start_index:end_index]
-                    images = facenet.load_data(paths_batch, False, False, self.image_size)
-                    feed_dict = { images_placeholder:images, phase_train_placeholder:False }
-                    emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
-                
-                classifier_filename_exp = os.path.expanduser(self.classifier_filename)
+            print('Loaded classifier model from file "%s"' % classifier_filename_exp)
 
-                if (self.mode=='TRAIN'):
-                    # Train classifier
-                    print('Training classifier')
-                    model = SVC(kernel='linear', probability=True)
-                    model.fit(emb_array, labels)
+            predictions = model.predict_proba(emb_array)
+            best_class_indices = np.argmax(predictions, axis=1)
+            best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
+            
+            for i in range(len(best_class_indices)):
+                print('%4d  %s: %.3f' % (i, class_names[best_class_indices[i]], best_class_probabilities[i]))
                 
-                    # Create a list of class names
-                    class_names = [ cls.name.replace('_', ' ') for cls in dataset]
-
-                    # Saving classifier model
-                    with open(classifier_filename_exp, 'wb') as outfile:
-                        pickle.dump((model, class_names), outfile)
-                    print('Saved classifier model to file "%s"' % classifier_filename_exp)
-                    
-                elif (self.mode=='CLASSIFY'):
-                    # Classify images
-                    print('Testing classifier')
-                    with open(classifier_filename_exp, 'rb') as infile:
-                        (model, class_names) = pickle.load(infile)
-
-                    print('Loaded classifier model from file "%s"' % classifier_filename_exp)
-
-                    predictions = model.predict_proba(emb_array)
-                    best_class_indices = np.argmax(predictions, axis=1)
-                    best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
-                    
-                    for i in range(len(best_class_indices)):
-                        print('%4d  %s: %.3f' % (i, class_names[best_class_indices[i]], best_class_probabilities[i]))
-                        
-                    accuracy = np.mean(np.equal(best_class_indices, labels))
-                    print('Accuracy: %.3f' % accuracy)
+            accuracy = np.mean(np.equal(best_class_indices, labels))
+            print('Accuracy: %.3f' % accuracy)

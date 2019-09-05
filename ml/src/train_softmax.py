@@ -43,52 +43,16 @@ from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 
-#class Train_softmax:
-def main():
-    logs_base_dir = './losgs/facenet'
-    models_base_dir = './models/facenet'
-    gpu_memory_fraction = 0.8
-    data_dir = './align/0726_align'
-    max_nrof_epochs = 5
-    batch_size = 1
-    image_size = 160
-    epoch_size = 50
-    embedding_size = 128
-    random_crop = 'store_true'
-    random_flip = 'store_true'
-    random_rotate = 'store_true'
-    use_fixed_image_standardization = 'store_true'
-    model_def = 'models.inception_resnet_v1'
-    keep_probability = 1.0
-    weight_decay = 0.0
-    center_loss_factor = 0.0
-    center_loss_alfa = 0.95
-    prelogits_norm_loss_factor = 0.0
-    prelogits_norm_p = 1.0
-    prelogits_hist_max = 10.0
-    learning_rate = 0.1
-    learning_rate_decay_epochs = 100
-    learning_rate_decay_factor = 1.0
-    moving_average_decay = 0.9999
-    seed = 666
-    optimizer = 'ADAGRAD'
-    nrof_preprocess_threads = 4
-    log_histograms = 'store_true'
-    learning_rate_schedule_file = 'data/learning_rate_schedule.txt'
-    filter_percentile = 100.0
-    filter_filename =  ''
-    filter_min_nrof_images_per_class = 0
-    validate_every_n_epochs = 5
-    validation_set_split_ratio = 0.0
-    min_nrof_val_images_per_class = 0
-
-    lfw_pairs = 'data/pairs.txt'
-    lfw_dir = ''
-    lfw_batch_size = 100
-    lfw_nrof_folds = 10
-    lfw_distance_metric = 0
-    lfw_use_flipped_images = 'stroe_true'
-    lfw_subtract_mean = 'store_true'
+def train_softmax(pretrained_model = None, data_dir = 'src/align/test_0823_align', logs_base_dir= 'src/losgs/facenet', models_base_dir = 'src/models/facenet', gpu_memory_fraction = 0.8,
+    model_def = 'models.inception_resnet_v1', max_nrof_epochs = 5, batch_size = 1, image_size = 160, epoch_size = 50, embedding_size = 128, random_crop = 'store_true',
+    random_flip = 'store_true', random_rotate = 'store_true', use_fixed_images_image_standardization = 'store_true', keep_probability = 1.0,
+    weight_decay = 0.0, center_loss_factor = 0.0, center_loss_alfa = 0.95, prelogits_norm_loss_factor = 0.0, prelogits_norm_p = 1.0,
+    prelogits_hist_max = 10.0, optimizer = 'ADAGRAD', learning_rate = 0.1, learning_rate_decay_epochs = 100, learning_rate_decay_factor = 1.0,
+    moving_average_decay = 0.9999, seed = 666, nrof_preprocess_threads = 4, log_histograms = 'store_true',
+    learning_rate_schedule_file = 'data/learning_rate_schedule.txt', filter_filename =  '', filter_percentile = 100.0,
+    filter_min_nrof_images_per_class = 0, validate_every_n_epochs = 5, validation_set_split_ratio = 0.0, min_nrof_val_images_per_class = 0,
+    lfw_batch_size = '100', lfw_nrof_folds = 10, lfw_distance_metric = 0, lfw_subtract_mean = 'store_true', lfw_use_flipped_images = 'store_true',
+    use_fixed_image_standardization = 'store_true', lfw_pairs = 'data/pairs.txt', lfw_dir = ''):
 
 
     #def training_sotfmax:    
@@ -151,10 +115,7 @@ def main():
         # Create a queue that produces indices into the image_list and label_list 
         labels = ops.convert_to_tensor(label_list, dtype=tf.int32)
         range_size = array_ops.shape(labels)[0]
-        #index_queue = tf.train.range_input_producer(range_size, num_epochs=None,
-        #                     shuffle=True, seed=None, capacity=32)
-        ###################0725 수정 중
-        #index_queue = tf.data.Dataset.range(range_size).shuffle(shuffle=True).repeat(None).seed(None).capacity(32)
+
         index_queue = tf.train.range_input_producer(range_size, num_epochs=None, shuffle=True, seed=None, capacity=32)
 
         index_dequeue_op = index_queue.dequeue_many(batch_size*epoch_size, 'index_dequeue')
@@ -180,9 +141,6 @@ def main():
         
         print('Number of classes in training set: %d' % nrof_classes)
         print('Number of examples in training set: %d' % len(image_list))
-
-        print('Number of classes in validation set: %d' % len(val_set))
-        print('Number of examples in validation set: %d' % len(val_image_list))
         
         print('Building training graph')
         
@@ -369,6 +327,7 @@ def train(sess, epoch, image_list, label_list, index_dequeue_op, enqueue_op, ima
 
     # Training loop
     train_time = 0
+    epoch_size = 50
     while batch_number < epoch_size:
         start_time = time.time()
         feed_dict = {learning_rate_placeholder: lr, phase_train_placeholder:True, batch_size_placeholder:batch_size}
@@ -407,6 +366,7 @@ def validate(sess, epoch, image_list, label_list, enqueue_op, image_paths_placeh
 
     print('Running forward pass on validation set')
 
+    lfw_batch_size = '100'
     nrof_batches = len(label_list) // lfw_batch_size
     nrof_images = nrof_batches * lfw_batch_size
     
@@ -524,6 +484,3 @@ def save_variables_and_metagraph(sess, saver, summary_writer, model_dir, model_n
     summary.value.add(tag='time/save_metagraph', simple_value=save_time_metagraph)
     summary_writer.add_summary(summary, step)
 
-
-#if __name__ == '__main__':
-#    main()
